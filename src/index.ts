@@ -1,60 +1,57 @@
-import { cfg } from "./config";
-import { handlerLogin, handlerRefresh, handlerRevoke } from "./api/auth";
+import { cfg } from './config';
+import { handlerLogin, handlerRefresh, handlerRevoke } from './api/auth';
 import {
   errorHandlingMiddleware,
   cacheMiddleware,
   withConfig,
-} from "./api/middleware";
-import { handlerUsersCreate } from "./api/users";
+} from './api/middleware';
+import { handlerUsersCreate } from './api/users';
 import {
   handlerVideoGet,
   handlerVideoMetaCreate,
   handlerVideoMetaDelete,
   handlerVideosRetrieve,
-} from "./api/video-meta";
-import { handlerUploadVideo } from "./api/videos";
-import { handlerUploadThumbnail, handlerGetThumbnail } from "./api/thumbnails";
-import { handlerReset } from "./api/reset";
-import { ensureAssetsDir } from "./api/assets";
-import spa from "./app/index.html";
+} from './api/video-meta';
+import { handlerUploadVideo } from './api/videos';
+import { handlerUploadThumbnail } from './api/thumbnails';
+import { handlerReset } from './api/reset';
+import { ensureAssetsDir } from './api/assets';
+import spa from './app/index.html';
 
 ensureAssetsDir(cfg);
 
 Bun.serve({
   port: Number(cfg.port),
-  development: cfg.platform === "dev",
+  development: cfg.platform === 'dev',
   routes: {
-    "/": spa,
-    "/api/login": {
+    '/': spa,
+    '/api/login': {
       POST: withConfig(cfg, handlerLogin),
     },
-    "/api/refresh": {
+    '/api/refresh': {
       POST: withConfig(cfg, handlerRefresh),
     },
-    "/api/revoke": {
+    '/api/revoke': {
       POST: withConfig(cfg, handlerRevoke),
     },
-    "/api/users": {
+    '/api/users': {
       POST: withConfig(cfg, handlerUsersCreate),
     },
-    "/api/videos": {
+    '/api/videos': {
       GET: withConfig(cfg, handlerVideosRetrieve),
       POST: withConfig(cfg, handlerVideoMetaCreate),
     },
-    "/api/videos/:videoId": {
+    '/api/videos/:videoId': {
       GET: withConfig(cfg, handlerVideoGet),
       DELETE: withConfig(cfg, handlerVideoMetaDelete),
     },
-    "/api/thumbnail_upload/:videoId": {
+    '/api/thumbnail_upload/:videoId': {
       POST: withConfig(cfg, handlerUploadThumbnail),
     },
-    "/api/thumbnails/:videoId": {
-      GET: withConfig(cfg, handlerGetThumbnail),
-    },
-    "/api/video_upload/:videoId": {
+    '/api/video_upload/:videoId': {
       POST: withConfig(cfg, handlerUploadVideo),
     },
-    "/admin/reset": {
+    '/admin/reset': {
       POST: withConfig(cfg, handlerReset),
     },
   },
@@ -63,13 +60,13 @@ Bun.serve({
     const url = new URL(req.url);
     const path = url.pathname;
 
-    if (path.startsWith("/assets")) {
+    if (path.startsWith('/assets')) {
       return cacheMiddleware(() =>
-        serveStaticFile(path.replace("/assets/", ""), cfg.assetsRoot)
+        serveStaticFile(path.replace('/assets/', ''), cfg.assetsRoot)
       )(req);
     }
 
-    return new Response("Not Found", { status: 404 });
+    return new Response('Not Found', { status: 404 });
   },
 
   error(err) {
@@ -85,9 +82,9 @@ async function serveStaticFile(relativePath: string, basePath: string) {
   try {
     const f = Bun.file(filePath);
     return new Response(await f.bytes(), {
-      headers: { "Content-Type": f.type || "application/octet-stream" },
+      headers: { 'Content-Type': f.type || 'application/octet-stream' },
     });
   } catch {
-    return new Response("File not found", { status: 404 });
+    return new Response('File not found', { status: 404 });
   }
 }
