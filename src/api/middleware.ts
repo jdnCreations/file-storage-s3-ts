@@ -1,12 +1,12 @@
-import type { BunRequest } from "bun";
-import type { ApiConfig } from "../config";
+import type { BunRequest } from 'bun';
+import type { ApiConfig } from '../config';
 import {
   BadRequestError,
   NotFoundError,
   UserForbiddenError,
   UserNotAuthenticatedError,
-} from "./errors";
-import { respondWithJSON } from "./json";
+} from './errors';
+import { respondWithJSON } from './json';
 
 type HandlerWithConfig = (cfg: ApiConfig, req: BunRequest) => Promise<Response>;
 
@@ -14,13 +14,13 @@ export function withConfig(cfg: ApiConfig, handler: HandlerWithConfig) {
   return (req: BunRequest) => handler(cfg, req);
 }
 
-export function cacheMiddleware(
-  next: (req: Request) => Response | Promise<Response>,
+export function noCacheMiddleware(
+  next: (req: Request) => Response | Promise<Response>
 ): (req: Request) => Promise<Response> {
   return async function (req: Request): Promise<Response> {
     const res = await next(req);
     const headers = new Headers(res.headers);
-    headers.set("Cache-Control", "max-age=3600");
+    headers.set('Cache-Control', 'no-store');
 
     return new Response(res.body, {
       status: res.status,
@@ -32,10 +32,10 @@ export function cacheMiddleware(
 
 export function errorHandlingMiddleware(
   cfg: ApiConfig,
-  err: unknown,
+  err: unknown
 ): Response {
   let statusCode = 500;
-  let message = "Something went wrong on our end";
+  let message = 'Something went wrong on our end';
 
   if (err instanceof BadRequestError) {
     statusCode = 400;
@@ -53,7 +53,7 @@ export function errorHandlingMiddleware(
 
   if (statusCode >= 500) {
     const errStr = errStringFromError(err);
-    if (cfg.platform === "dev") {
+    if (cfg.platform === 'dev') {
       message = errStr;
     }
     console.log(errStr);
@@ -63,7 +63,7 @@ export function errorHandlingMiddleware(
 }
 
 function errStringFromError(err: unknown) {
-  if (typeof err === "string") return err;
+  if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
-  return "An unknown error occurred";
+  return 'An unknown error occurred';
 }
