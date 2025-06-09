@@ -7,11 +7,6 @@ import { BadRequestError, NotFoundError, UserForbiddenError } from './errors';
 import path from 'path';
 import { randomBytes } from 'crypto';
 
-type Thumbnail = {
-  data: ArrayBuffer;
-  mediaType: string;
-};
-
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const { videoId } = req.params as { videoId?: string };
   if (!videoId) {
@@ -49,6 +44,9 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   Bun.write(path.join(cfg.assetsRoot, filePath), imageData);
 
   const metadata = getVideo(cfg.db, videoId);
+  if (!metadata) {
+    throw new NotFoundError('No video exists with that ID');
+  }
   if (metadata?.userID != userID) {
     throw new UserForbiddenError('Not your video');
   }
