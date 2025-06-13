@@ -49,12 +49,16 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const videoData = await file.arrayBuffer();
   const random = randomBytes(32).toString('base64url');
 
-  const fileName = `${random}.${ext}`;
+  let fileName = `${random}.${ext}`;
 
   const filePath = path.join(cfg.assetsRoot, fileName);
 
   // write file to local file storage temporarily
-  Bun.write(filePath, videoData);
+  await Bun.write(filePath, videoData);
+
+  const ratio = await getVideoAspectRatio(filePath);
+
+  fileName = ratio + '/' + fileName;
 
   // create file on s3, and then write to it.
   const s3File = cfg.s3Client.file(fileName);
@@ -68,4 +72,59 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   updateVideo(cfg.db, metadata);
 
   return respondWithJSON(200, null);
+}
+
+async function getVideoAspectRatio(filePath: string) {
+  const nineSixteenthsRatio = 9 / 16;
+  const sixteenNinthsRatio = 16 / 9;
+  const tolerance = 0.001;
+
+  const proc = Bun.spawn(
+    [
+      'ffprobe',
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-show_entries',
+      'stream=width,height',
+      '-of',
+      'json',
+      filePath,
+    ],
+    {
+      stdout: 'pipe',
+      stderr: 'inherit',
+    }
+  );
+
+  const out = await new Response(proc.stdout).text();
+  const err = await new Response(proc.stderr).text();
+  const exited = await proc.exited;
+  if (exited !== 0) {
+    console.log('error getting video aspect ratio');
+    return;
+  }
+
+  if (err) {
+    console.log(err);
+    return;
+  }
+
+  const parsed = JSON.parse(out);
+
+  const width = parsed.streams[0].width;
+  const height = parsed.streams[0].height;
+
+  const aspectRatio = width / height;
+
+  let ratio = 'other';
+
+  if (Math.abs(aspectRatio - nineSixteenthsRatio) < tolerance) {
+    ratio = 'portrait';
+  } else if (Math.abs(aspectRatio - sixteenNinthsRatio) < tolerance) {
+    ratio = 'landscape';
+  }
+
+  return ratio;
 }
