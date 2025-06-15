@@ -53,21 +53,27 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 
   const filePath = path.join(cfg.assetsRoot, fileName);
 
-  // write file to local file storage temporarily
   await Bun.write(filePath, videoData);
-
   const ratio = await getVideoAspectRatio(filePath);
+
+  const processedFilePath = await processVideoForFastStart(filePath);
+  if (!processedFilePath) {
+    // write file to local file storage temporarily
+    console.error('could not process video for fast start');
+    return;
+  }
 
   fileName = ratio + '/' + fileName;
 
   // create file on s3, and then write to it.
   const s3File = cfg.s3Client.file(fileName);
-  s3File.write(Bun.file(filePath), { type: file.type });
+  s3File.write(Bun.file(processedFilePath), { type: file.type });
 
   metadata.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${fileName}`;
 
-  // delete temp file
+  // delete temp file(s)
   Bun.file(filePath).delete();
+  Bun.file(processedFilePath).delete();
 
   updateVideo(cfg.db, metadata);
 
@@ -127,4 +133,46 @@ async function getVideoAspectRatio(filePath: string) {
   }
 
   return ratio;
+}
+
+async function processVideoForFastStart(inputFilePath: string) {
+  const [nameOfFile, ext] = inputFilePath.split('.');
+  const processed = nameOfFile + '.processed';
+  const outputFilePath = processed + '.' + ext;
+
+  const proc = Bun.spawn(
+    [
+      'ffmpeg',
+      '-i',
+      inputFilePath,
+      '-movflags',
+      'faststart',
+      '-map_metadata',
+      '0',
+      '-codec',
+      'copy',
+      '-f',
+      'mp4',
+      outputFilePath,
+    ],
+    {
+      stdout: 'pipe',
+      stderr: 'inherit',
+    }
+  );
+
+  const out = await new Response(proc.stdout).text();
+  const err = await new Response(proc.stderr).text();
+  const exited = await proc.exited;
+  if (exited !== 0) {
+    console.log('error getting video aspect ratio');
+    return;
+  }
+
+  if (err) {
+    console.log(err);
+    return;
+  }
+
+  return outputFilePath;
 }
