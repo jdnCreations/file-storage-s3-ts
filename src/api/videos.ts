@@ -2,10 +2,10 @@ import { randomBytes, randomUUID } from 'crypto';
 import { respondWithJSON } from './json';
 
 import { type ApiConfig } from '../config';
-import type { BunRequest } from 'bun';
+import { S3Client, type BunRequest } from 'bun';
 import { BadRequestError, NotFoundError, UserForbiddenError } from './errors';
 import { getBearerToken, validateJWT } from '../auth';
-import { getVideo, updateVideo } from '../db/videos';
+import { getVideo, updateVideo, type Video } from '../db/videos';
 import path from 'path';
 
 export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
@@ -60,7 +60,7 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   if (!processedFilePath) {
     // write file to local file storage temporarily
     console.error('could not process video for fast start');
-    return;
+    return respondWithJSON(500, null);
   }
 
   fileName = ratio + '/' + fileName;
@@ -69,15 +69,38 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const s3File = cfg.s3Client.file(fileName);
   s3File.write(Bun.file(processedFilePath), { type: file.type });
 
-  metadata.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${fileName}`;
+  metadata.videoURL = fileName;
+
+  const presignedVideo = dbVideoToSignedVideo(cfg, metadata);
 
   // delete temp file(s)
   Bun.file(filePath).delete();
   Bun.file(processedFilePath).delete();
 
   updateVideo(cfg.db, metadata);
+  console.log('this is inside original video:', metadata);
+  console.log('presignedVideo:', presignedVideo);
 
-  return respondWithJSON(200, null);
+  return respondWithJSON(200, presignedVideo);
+}
+
+function generatePresignedURL(cfg: ApiConfig, key: string, expireTime: number) {
+  const presignedURL = S3Client.presign(key, {
+    bucket: cfg.s3Bucket,
+    expiresIn: expireTime,
+  });
+  return presignedURL;
+}
+
+export function dbVideoToSignedVideo(cfg: ApiConfig, video: Video) {
+  if (!video.videoURL) {
+    return video;
+  }
+
+  const copiedVideo = { ...video };
+
+  copiedVideo.videoURL = generatePresignedURL(cfg, video.videoURL, 3600);
+  return copiedVideo;
 }
 
 async function getVideoAspectRatio(filePath: string) {
