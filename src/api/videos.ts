@@ -63,44 +63,28 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     return respondWithJSON(500, null);
   }
 
+  console.log('processed file path:', processedFilePath);
+
   fileName = ratio + '/' + fileName;
 
   // create file on s3, and then write to it.
   const s3File = cfg.s3Client.file(fileName);
-  s3File.write(Bun.file(processedFilePath), { type: file.type });
+  const written = await s3File.write(Bun.file(processedFilePath), {
+    type: file.type,
+  });
 
-  metadata.videoURL = fileName;
+  console.log(written);
 
-  const presignedVideo = dbVideoToSignedVideo(cfg, metadata);
+  // store cloudfront url
+  metadata.videoURL = cfg.s3CfDistribution + '/' + fileName;
 
   // delete temp file(s)
   Bun.file(filePath).delete();
   Bun.file(processedFilePath).delete();
 
   updateVideo(cfg.db, metadata);
-  console.log('this is inside original video:', metadata);
-  console.log('presignedVideo:', presignedVideo);
 
-  return respondWithJSON(200, presignedVideo);
-}
-
-function generatePresignedURL(cfg: ApiConfig, key: string, expireTime: number) {
-  const presignedURL = S3Client.presign(key, {
-    bucket: cfg.s3Bucket,
-    expiresIn: expireTime,
-  });
-  return presignedURL;
-}
-
-export function dbVideoToSignedVideo(cfg: ApiConfig, video: Video) {
-  if (!video.videoURL) {
-    return video;
-  }
-
-  const copiedVideo = { ...video };
-
-  copiedVideo.videoURL = generatePresignedURL(cfg, video.videoURL, 3600);
-  return copiedVideo;
+  return respondWithJSON(200, metadata);
 }
 
 async function getVideoAspectRatio(filePath: string) {
